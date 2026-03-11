@@ -17,11 +17,23 @@
         currentIndex: -1,
         timer: null,
         configUpdateTimer: null,
-        isTransitioning: false
+        isTransitioning: false,
+        dvd: {
+            x: 100,
+            y: 100,
+            dx: 3,
+            dy: 3,
+            width: 200,
+            height: 100,
+            colors: ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500'],
+            colorIndex: 0,
+            animationFrame: null
+        }
     };
 
     const container = document.getElementById('display-container');
-    const clockElement = document.getElementById('clock');
+    const timeElement = document.getElementById('time');
+    const dateElement = document.getElementById('date');
 
     /**
      * Initialize the application
@@ -38,8 +50,8 @@
         
         startDisplay();
         
-        // Set up periodic config check (every 2 minutes)
-        state.configUpdateTimer = setInterval(updateConfig, 120000);
+        // Set up periodic config check (every 5 minutes)
+        state.configUpdateTimer = setInterval(updateConfig, 300000);
     }
 
     /**
@@ -47,10 +59,16 @@
      */
     function updateClock() {
         const now = new Date();
+        
+        // Time
         const hours = String(now.getHours()).padStart(2, '0');
         const minutes = String(now.getMinutes()).padStart(2, '0');
         const seconds = String(now.getSeconds()).padStart(2, '0');
-        clockElement.textContent = `${hours}:${minutes}:${seconds}`;
+        if (timeElement) timeElement.textContent = `${hours}:${minutes}:${seconds}`;
+
+        // Date
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        if (dateElement) dateElement.textContent = now.toLocaleDateString(undefined, options);
     }
 
     /**
@@ -95,6 +113,7 @@
      */
     function startDisplay() {
         if (state.timer) clearTimeout(state.timer);
+        if (state.dvd.animationFrame) cancelAnimationFrame(state.dvd.animationFrame);
         
         if (!config.images || config.images.length === 0) {
             container.innerHTML = '<div class="message-container active"><h1>No images found in config.json</h1></div>';
@@ -113,6 +132,9 @@
             case 3:
                 showMode3();
                 break;
+            case 4:
+                showMode4();
+                break;
             default:
                 showMode3();
         }
@@ -128,7 +150,7 @@
         const imageUrl = getNextImage();
         if (!imageUrl) {
             state.isTransitioning = false;
-            state.timer = setTimeout(showNextMode1, 5000);
+            state.timer = setTimeout(showNextMode1, 10000);
             return;
         }
 
@@ -157,7 +179,59 @@
             return;
         }
 
-        state.timer = setTimeout(showNextMode1, 5000);
+        state.timer = setTimeout(showNextMode1, 10000);
+    }
+
+    /**
+     * Mode 4: Bouncing DVD Logo
+     */
+    function showMode4() {
+        container.innerHTML = `
+            <div class="dvd-container">
+                <div id="dvd-logo" class="dvd-logo"></div>
+            </div>
+        `;
+
+        const logo = document.getElementById('dvd-logo');
+        const parent = container.querySelector('.dvd-container');
+        
+        // Reset position
+        state.dvd.x = Math.random() * (window.innerWidth - state.dvd.width);
+        state.dvd.y = Math.random() * (window.innerHeight - state.dvd.height);
+        
+        function animate() {
+            const rect = parent.getBoundingClientRect();
+            const maxX = rect.width - state.dvd.width;
+            const maxY = rect.height - state.dvd.height;
+
+            state.dvd.x += state.dvd.dx;
+            state.dvd.y += state.dvd.dy;
+
+            let hit = false;
+
+            if (state.dvd.x >= maxX || state.dvd.x <= 0) {
+                state.dvd.dx *= -1;
+                state.dvd.x = Math.max(0, Math.min(state.dvd.x, maxX));
+                hit = true;
+            }
+
+            if (state.dvd.y >= maxY || state.dvd.y <= 0) {
+                state.dvd.dy *= -1;
+                state.dvd.y = Math.max(0, Math.min(state.dvd.y, maxY));
+                hit = true;
+            }
+
+            if (hit) {
+                state.dvd.colorIndex = (state.dvd.colorIndex + 1) % state.dvd.colors.length;
+                logo.style.backgroundColor = state.dvd.colors[state.dvd.colorIndex];
+            }
+
+            logo.style.transform = `translate(${state.dvd.x}px, ${state.dvd.y}px)`;
+            state.dvd.animationFrame = requestAnimationFrame(animate);
+        }
+
+        logo.style.backgroundColor = state.dvd.colors[state.dvd.colorIndex];
+        animate();
     }
 
     /**
