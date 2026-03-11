@@ -144,13 +144,24 @@
      * Mode 1: Fullscreen Slideshow
      */
     async function showNextMode1() {
-        if (state.isTransitioning) return;
+        if (state.isTransitioning) {
+            // If we're stuck transitioning for some reason, force reset after a while
+            if (!state.transitionStartTime || Date.now() - state.transitionStartTime > 15000) {
+                state.isTransitioning = false;
+            } else {
+                return;
+            }
+        }
+        
         state.isTransitioning = true;
+        state.transitionStartTime = Date.now();
 
         const imageUrl = getNextImage();
+        console.log('Mode 1: Next image ->', imageUrl);
+
         if (!imageUrl) {
             state.isTransitioning = false;
-            state.timer = setTimeout(showNextMode1, 10000);
+            state.timer = setTimeout(showNextMode1, 5000);
             return;
         }
 
@@ -164,18 +175,25 @@
             
             // Trigger fade
             requestAnimationFrame(() => {
-                img.classList.add('active');
-                if (oldActive) {
-                    oldActive.classList.remove('active');
-                    setTimeout(() => oldActive.remove(), 2000);
-                }
-                state.isTransitioning = false;
+                // Small delay to ensure browser registers the element before adding active class
+                setTimeout(() => {
+                    img.classList.add('active');
+                    if (oldActive) {
+                        oldActive.classList.remove('active');
+                        setTimeout(() => {
+                            if (oldActive.parentNode === container) {
+                                oldActive.remove();
+                            }
+                        }, 2000);
+                    }
+                    state.isTransitioning = false;
+                }, 50);
             });
         } catch (error) {
             console.error(`Failed to load image: ${imageUrl}`, error);
             state.isTransitioning = false;
-            // Try next image immediately if this one failed
-            showNextMode1();
+            // Try next image sooner if this one failed
+            state.timer = setTimeout(showNextMode1, 2000);
             return;
         }
 
@@ -307,7 +325,7 @@
     }
 
     /**
-     * Get next image URL avoiding recent history
+     * Get next image URL using a shuffled queue for better variety
      */
     function getNextImage() {
         if (!config.images || config.images.length === 0) return null;
@@ -315,17 +333,19 @@
         // If only one image, just return it
         if (config.images.length === 1) return config.images[0];
 
-        let available = config.images.filter(img => !state.history.includes(img));
-        
-        // If we ran out of available images (history too long), reset history partially
-        if (available.length === 0) {
-            state.history = state.history.slice(-1);
-            available = config.images.filter(img => !state.history.includes(img));
+        // Initialize or refill the shuffled pool
+        if (!state.shuffledPool || state.shuffledPool.length === 0) {
+            state.shuffledPool = [...config.images];
+            shuffleArray(state.shuffledPool);
+            
+            // Avoid showing the same image twice in a row when looping
+            if (state.shuffledPool.length > 1 && state.shuffledPool[0] === state.history[state.history.length - 1]) {
+                const first = state.shuffledPool.shift();
+                state.shuffledPool.push(first);
+            }
         }
 
-        const randomIndex = Math.floor(Math.random() * available.length);
-        const selected = available[randomIndex];
-        
+        const selected = state.shuffledPool.shift();
         updateHistory(selected);
         return selected;
     }
