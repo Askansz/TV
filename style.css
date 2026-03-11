@@ -91,12 +91,38 @@ body, html {
     background-color: #111;
 }
 
-/* Sample Masonry Layouts */
-.grid-item:nth-child(1) { grid-column: span 6; grid-row: span 8; }
-.grid-item:nth-child(2) { grid-column: span 6; grid-row: span 4; }
-.grid-item:nth-child(3) { grid-column: span 3; grid-row: span 4; }
-.grid-item:nth-child(4) { grid-column: span 3; grid-row: span 4; }
-.grid-item:nth-child(5) { grid-column: span 6; grid-row: span 4; }
+/* Layout for 1 image in grid (fallback) */
+.grid-count-1 .grid-item { grid-column: span 12; grid-row: span 12; }
+
+/* Layout for 2 images */
+.grid-count-2 .item-1 { grid-column: span 6; grid-row: span 12; }
+.grid-count-2 .item-2 { grid-column: span 6; grid-row: span 12; }
+
+/* Layout for 3 images */
+.grid-count-3 .item-1 { grid-column: span 8; grid-row: span 12; }
+.grid-count-3 .item-2 { grid-column: span 4; grid-row: span 6; }
+.grid-count-3 .item-3 { grid-column: span 4; grid-row: span 6; }
+
+/* Layout for 4 images */
+.grid-count-4 .item-1 { grid-column: span 6; grid-row: span 6; }
+.grid-count-4 .item-2 { grid-column: span 6; grid-row: span 6; }
+.grid-count-4 .item-3 { grid-column: span 6; grid-row: span 6; }
+.grid-count-4 .item-4 { grid-column: span 6; grid-row: span 6; }
+
+/* Layout for 5 images (Original) */
+.grid-count-5 .item-1 { grid-column: span 6; grid-row: span 8; }
+.grid-count-5 .item-2 { grid-column: span 6; grid-row: span 4; }
+.grid-count-5 .item-3 { grid-column: span 3; grid-row: span 4; }
+.grid-count-5 .item-4 { grid-column: span 3; grid-row: span 4; }
+.grid-count-5 .item-5 { grid-column: span 6; grid-row: span 4; }
+
+/* Layout for 6 images */
+.grid-count-6 .item-1 { grid-column: span 4; grid-row: span 6; }
+.grid-count-6 .item-2 { grid-column: span 4; grid-row: span 6; }
+.grid-count-6 .item-3 { grid-column: span 4; grid-row: span 6; }
+.grid-count-6 .item-4 { grid-column: span 4; grid-row: span 6; }
+.grid-count-6 .item-5 { grid-column: span 4; grid-row: span 6; }
+.grid-count-6 .item-6 { grid-column: span 4; grid-row: span 6; }
 
 /* Mode 3: Reserved */
 .message-container {
