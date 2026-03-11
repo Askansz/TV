@@ -30,7 +30,12 @@
         updateClock();
         setInterval(updateClock, 1000);
 
-        await updateConfig();
+        try {
+            await updateConfig();
+        } catch (e) {
+            console.error('Initial config fetch failed, using defaults');
+        }
+        
         startDisplay();
         
         // Set up periodic config check (every 2 minutes)
@@ -55,18 +60,20 @@
         try {
             const timestamp = new Date().getTime();
             const response = await fetch(`config.json?t=${timestamp}`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
             const newConfig = await response.json();
             
             // Check if config actually changed
             const configChanged = JSON.stringify(config) !== JSON.stringify(newConfig);
             
             if (configChanged) {
-                console.log('Configuration updated');
+                console.log('Configuration updated:', newConfig);
                 const modeChanged = config.mode !== newConfig.mode;
                 config = newConfig;
                 
                 // Refresh image pool
-                state.currentImages = [...config.images];
+                state.currentImages = [...(config.images || [])];
                 shuffleArray(state.currentImages);
                 
                 // If mode changed, restart display immediately
@@ -76,6 +83,10 @@
             }
         } catch (error) {
             console.error('Failed to fetch config:', error);
+            // If we have no images at all, use a placeholder
+            if (!config.images || config.images.length === 0) {
+                config.images = ["https://picsum.photos/seed/placeholder/1920/1080"];
+            }
         }
     }
 
@@ -84,6 +95,12 @@
      */
     function startDisplay() {
         if (state.timer) clearTimeout(state.timer);
+        
+        if (!config.images || config.images.length === 0) {
+            container.innerHTML = '<div class="message-container active"><h1>No images found in config.json</h1></div>';
+            return;
+        }
+
         container.innerHTML = '';
         
         switch (config.mode) {
@@ -115,22 +132,30 @@
             return;
         }
 
-        // Preload
-        const img = await preloadImage(imageUrl);
-        img.className = 'slideshow-image';
-        
-        const oldActive = container.querySelector('.slideshow-image.active');
-        container.appendChild(img);
-        
-        // Trigger fade
-        requestAnimationFrame(() => {
-            img.classList.add('active');
-            if (oldActive) {
-                oldActive.classList.remove('active');
-                setTimeout(() => oldActive.remove(), 2000); // Remove after transition
-            }
+        try {
+            // Preload
+            const img = await preloadImage(imageUrl);
+            img.className = 'slideshow-image';
+            
+            const oldActive = container.querySelector('.slideshow-image.active');
+            container.appendChild(img);
+            
+            // Trigger fade
+            requestAnimationFrame(() => {
+                img.classList.add('active');
+                if (oldActive) {
+                    oldActive.classList.remove('active');
+                    setTimeout(() => oldActive.remove(), 2000);
+                }
+                state.isTransitioning = false;
+            });
+        } catch (error) {
+            console.error(`Failed to load image: ${imageUrl}`, error);
             state.isTransitioning = false;
-        });
+            // Try next image immediately if this one failed
+            showNextMode1();
+            return;
+        }
 
         state.timer = setTimeout(showNextMode1, 5000);
     }
@@ -142,39 +167,56 @@
         if (state.isTransitioning) return;
         state.isTransitioning = true;
 
-        const count = 5;
-        const imageUrls = getMultipleImages(count);
+        // We try to get up to 6 images for a better grid
+        const targetCount = 6;
+        const imageUrls = getMultipleImages(targetCount);
         
         if (imageUrls.length === 0) {
+            console.warn('No images available for grid');
             state.isTransitioning = false;
-            state.timer = setTimeout(showNextMode2, 20000);
+            state.timer = setTimeout(showNextMode2, 5000);
             return;
         }
 
-        // Preload all
-        await Promise.all(imageUrls.map(url => preloadImage(url)));
+        try {
+            // Preload all images, but don't fail the whole grid if one fails
+            const results = await Promise.allSettled(imageUrls.map(url => preloadImage(url)));
+            const loadedImages = results
+                .filter(r => r.status === 'fulfilled')
+                .map((r, i) => ({ img: r.value, url: imageUrls[i] }));
 
-        const grid = document.createElement('div');
-        grid.className = 'grid-container';
-        
-        imageUrls.forEach(url => {
-            const img = document.createElement('img');
-            img.src = url;
-            img.className = 'grid-item';
-            grid.appendChild(img);
-        });
-
-        const oldGrid = container.querySelector('.grid-container.active');
-        container.appendChild(grid);
-
-        requestAnimationFrame(() => {
-            grid.classList.add('active');
-            if (oldGrid) {
-                oldGrid.classList.remove('active');
-                setTimeout(() => oldGrid.remove(), 2000);
+            if (loadedImages.length === 0) {
+                throw new Error('All images failed to load for grid');
             }
+
+            const grid = document.createElement('div');
+            grid.className = `grid-container grid-count-${loadedImages.length}`;
+            
+            loadedImages.forEach((item, index) => {
+                const img = item.img;
+                img.className = 'grid-item';
+                // Add a specific class for styling based on index
+                img.classList.add(`item-${index + 1}`);
+                grid.appendChild(img);
+            });
+
+            const oldGrid = container.querySelector('.grid-container.active');
+            container.appendChild(grid);
+
+            requestAnimationFrame(() => {
+                grid.classList.add('active');
+                if (oldGrid) {
+                    oldGrid.classList.remove('active');
+                    setTimeout(() => oldGrid.remove(), 2000);
+                }
+                state.isTransitioning = false;
+            });
+        } catch (error) {
+            console.error('Failed to load grid images:', error);
             state.isTransitioning = false;
-        });
+            state.timer = setTimeout(showNextMode2, 5000);
+            return;
+        }
 
         state.timer = setTimeout(showNextMode2, 20000);
     }
@@ -220,16 +262,24 @@
     function getMultipleImages(count) {
         if (!config.images || config.images.length === 0) return [];
         
-        // Shuffle and pick
         let pool = [...config.images];
         shuffleArray(pool);
         
+        // If we have fewer images than requested, just return all of them
+        if (pool.length <= count) return pool;
+
         // Avoid images from current grid if possible
-        const currentGridImages = Array.from(container.querySelectorAll('.grid-item')).map(img => img.src);
+        // Use relative paths for comparison
+        const currentGridImages = Array.from(container.querySelectorAll('.grid-item'))
+            .map(img => {
+                const src = img.getAttribute('src');
+                return src;
+            });
+            
         let preferred = pool.filter(img => !currentGridImages.includes(img));
         
         if (preferred.length < count) {
-            return pool.slice(0, Math.min(count, pool.length));
+            return pool.slice(0, count);
         }
         
         return preferred.slice(0, count);
