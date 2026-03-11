@@ -1,0 +1,5 @@
+{
+  "name": "Digital TV Photo Display",
+  "description": "A static digital photo display optimized for 16:9 TV screens with automatic configuration updates and multiple display modes.",
+  "requestFramePermissions": []
+}
